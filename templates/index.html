@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>WhyWhy 分析</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      background-color: #b2dfdb;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2rem;
+    }
+    h2 {
+      color: #004d40;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+    }
+    form {
+      background: #fff;
+      padding: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button[type="submit"] {
+      background-color: #00796b;
+      color: white;
+    }
+    button[type="submit"]:hover {
+      background-color: #004d40;
+    }
+    #clearBtn {
+      background-color: #d32f2f;
+      color: white;
+    }
+    #clearBtn:hover {
+      background-color: #b71c1c;
+    }
+    #exportPdfBtn {
+      background-color: #388e3c;
+      color: white;
+    }
+    #exportPdfBtn:hover {
+      background-color: #2e7d32;
+    }
+    #diagram {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      overflow-x: auto;
+    }
+    .mermaid svg .node rect {
+      cursor: pointer;
+      fill: #90caf9;
+      stroke: #1e88e5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>WhyWhy 分析</h2>
+
+    <form id="reasonForm">
+      <label>問題或原因節點：</label>
+      <input type="text" id="nodeInput" name="node" placeholder="例如：產品不良" required />
+
+      <label>原因 1：</label>
+      <input type="text" name="reason1" placeholder="例如：操作錯誤" required />
+
+      <label>原因 2：</label>
+      <input type="text" name="reason2" placeholder="例如：原料異常" required />
+
+      <button type="submit">新增原因</button>
+      <button type="button" id="clearBtn">🗑️ 清除所有分析</button>
+      <button type="button" id="exportPdfBtn">📄 匯出 PDF</button>
+    </form>
+
+    <div id="diagram">
+      <div class="mermaid">載入中...</div>
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: false });
+
+    function loadDiagram() {
+      $.get("/get_mermaid", function(data) {
+        $(".mermaid").text(data.code);
+        mermaid.init(undefined, ".mermaid");
+      });
+    }
+
+    // 點擊節點時：複製節點文字並帶回輸入框
+    $(document).on('click', '.mermaid svg .node', function () {
+      // 取第一個 <text> 的第一個 <tspan> 文字（節點主文字）
+      let text = $(this).find('text').first().find('tspan').first().text().trim();
+
+      if (!text) {
+        // fallback，取 text 的純文字
+        text = $(this).find('text').first().text().trim();
+      }
+
+      // 複製到剪貼簿（不成功也不阻塞）
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+
+      // 填入輸入框並聚焦
+      $('#nodeInput').val(text).focus();
+    });
+
+    $(document).ready(function () {
+      loadDiagram();
+
+      $("#reasonForm").submit(function (e) {
+        e.preventDefault();
+        $.post("/update_reason", $(this).serialize(), function () {
+          loadDiagram();
+          $("#reasonForm")[0].reset();
+        });
+      });
+
+      $("#clearBtn").click(function () {
+        if (confirm("確定要清除所有分析資料嗎？此操作無法復原。")) {
+          $.post("/clear", {}, function () {
+            loadDiagram();
+            $("#reasonForm")[0].reset();
+          });
+        }
+      });
+
+      $("#exportPdfBtn").click(function () {
+        const diagram = document.getElementById("diagram");
+
+        html2canvas(diagram, { scale: 3 }).then(canvas => {
+          const imgData = canvas.toDataURL("image/png");
+
+          const pdfPageWidth = 297;
+          const pdfPageHeight = 210;
+
+          const imgWidthPx = canvas.width;
+          const imgHeightPx = canvas.height;
+
+          const pxToMm = 0.264583;
+          const imgWidthMm = imgWidthPx * pxToMm;
+          const imgHeightMm = imgHeightPx * pxToMm;
+
+          const margin = 10;
+          const maxWidth = pdfPageWidth - margin * 2;
+          const maxHeight = pdfPageHeight - margin * 2;
+
+          let scale = Math.min(maxWidth / imgWidthMm, maxHeight / imgHeightMm);
+
+          const imgRenderWidth = imgWidthMm * scale;
+          const imgRenderHeight = imgHeightMm * scale;
+
+          const pdf = new jspdf.jsPDF({
+            unit: "mm",
+            format: "a4",
+            orientation: "landscape"
+          });
+
+          const x = (pdfPageWidth - imgRenderWidth) / 2;
+          const y = (pdfPageHeight - imgRenderHeight) / 2;
+
+          pdf.addImage(imgData, "PNG", x, y, imgRenderWidth, imgRenderHeight);
+          pdf.save("whywhy_analysis.pdf");
+        });
+      });
+    });
+  </script>
+</body>
+</html>
+
