@@ -5,10 +5,11 @@ app = Flask(__name__)
 why_tree = {}
 
 def safe_id(text):
-    # Mermaid ID 避免特殊字元
+    # 將非英數字轉成底線，當作 Mermaid ID
     return ''.join(c if c.isalnum() else '_' for c in text)
 
 def escape_mermaid_text(text):
+    # 文字分段加換行 <br>
     max_len = 6
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     return '<br>'.join(parts).replace('"', '\\"')
@@ -52,6 +53,7 @@ def get_mermaid():
         return lines
 
     if not why_tree:
+        # 預設顯示訊息
         return jsonify({'code': 'graph TD\nA["請輸入第一個問題"]'})
 
     root = list(why_tree.keys())[0]
