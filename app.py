@@ -1,10 +1,17 @@
 from flask import Flask, render_template, request, jsonify
-from collections import defaultdict
 
 app = Flask(__name__)
 
-# 為每個節點儲存兩個子原因
-why_tree = defaultdict(list)
+why_tree = {}
+
+def safe_id(text):
+    # Mermaid ID 避免特殊字元
+    return ''.join(c if c.isalnum() else '_' for c in text)
+
+def escape_mermaid_text(text):
+    max_len = 6
+    parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
+    return '<br>'.join(parts).replace('"', '\\"')
 
 @app.route('/')
 def index():
@@ -12,37 +19,35 @@ def index():
 
 @app.route('/update_reason', methods=['POST'])
 def update_reason():
-    node = request.form['node'].strip()
-    reason1 = request.form['reason1'].strip()
-    reason2 = request.form['reason2'].strip()
-    if node and reason1 and reason2:
-        why_tree[node] = [reason1, reason2]
-    return ('', 204)
+    global why_tree
+    node = request.form.get('node', '').strip()
+    reason1 = request.form.get('reason1', '').strip()
+    reason2 = request.form.get('reason2', '').strip()
 
-@app.route('/clear', methods=['POST'])
-def clear():
-    why_tree.clear()
-    return ('', 204)
+    if not node:
+        return jsonify({'status': 'error', 'message': '節點不可為空'})
+
+    if node not in why_tree:
+        why_tree[node] = []
+
+    for reason in (reason1, reason2):
+        if reason and reason not in why_tree[node]:
+            why_tree[node].append(reason)
+            if reason not in why_tree:
+                why_tree[reason] = []
+
+    return jsonify({'status': 'success'})
 
 @app.route('/get_mermaid')
 def get_mermaid():
-    id_map = {}
-    id_counter = [0]
-
-    def get_node_id(text):
-        if text not in id_map:
-            id_map[text] = f"node{id_counter[0]}"
-            id_counter[0] += 1
-        return id_map[text]
-
     def draw(node):
-        lines = []
         if node not in why_tree or not why_tree[node]:
-            return lines
+            return []
+        lines = []
         for reason in why_tree[node]:
-            parent_id = get_node_id(node)
-            child_id = get_node_id(reason)
-            lines.append(f'{parent_id}["{escape_mermaid_text(node)}"] --> {child_id}["{escape_mermaid_text(reason)}"]')
+            lines.append(
+                f'{safe_id(node)}["{escape_mermaid_text(node)}"] --> {safe_id(reason)}["{escape_mermaid_text(reason)}"]'
+            )
             lines.extend(draw(reason))
         return lines
 
@@ -51,11 +56,15 @@ def get_mermaid():
 
     root = list(why_tree.keys())[0]
     lines = ['graph TD']
+    lines.append(f'{safe_id(root)}["{escape_mermaid_text(root)}"]')
     lines.extend(draw(root))
     return jsonify({'code': '\n'.join(lines)})
 
-def escape_mermaid_text(text):
-    return text.replace('"', '\\"')
+@app.route('/clear', methods=['POST'])
+def clear():
+    global why_tree
+    why_tree = {}
+    return jsonify({'status': 'cleared'})
 
 if __name__ == '__main__':
     app.run(debug=True)

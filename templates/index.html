@@ -1,3 +1,4 @@
+# index.html
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -73,7 +74,7 @@
       overflow-x: auto;
     }
     .mermaid svg .node rect {
-      cursor: pointer;
+      cursor: default;
       fill: #90caf9;
       stroke: #1e88e5;
     }
@@ -85,7 +86,7 @@
 
     <form id="reasonForm">
       <label>問題或原因節點：</label>
-      <input type="text" id="nodeInput" name="node" placeholder="例如：產品不良" required />
+      <input type="text" name="node" placeholder="例如：產品不良" required />
 
       <label>原因 1：</label>
       <input type="text" name="reason1" placeholder="例如：操作錯誤" required />
@@ -104,33 +105,15 @@
   </div>
 
   <script>
-    mermaid.initialize({ startOnLoad: false });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
 
     function loadDiagram() {
       $.get("/get_mermaid", function(data) {
         $(".mermaid").text(data.code);
-        mermaid.init(undefined, ".mermaid");
+        mermaid.run({ nodes: document.querySelectorAll('.mermaid') })
+          .catch(err => console.error('Mermaid render error:', err));
       });
     }
-
-    // 點擊節點時：複製節點文字並帶回輸入框
-    $(document).on('click', '.mermaid svg .node', function () {
-      // 取第一個 <text> 的第一個 <tspan> 文字（節點主文字）
-      let text = $(this).find('text').first().find('tspan').first().text().trim();
-
-      if (!text) {
-        // fallback，取 text 的純文字
-        text = $(this).find('text').first().text().trim();
-      }
-
-      // 複製到剪貼簿（不成功也不阻塞）
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {});
-      }
-
-      // 填入輸入框並聚焦
-      $('#nodeInput').val(text).focus();
-    });
 
     $(document).ready(function () {
       loadDiagram();
@@ -194,4 +177,3 @@
   </script>
 </body>
 </html>
-
